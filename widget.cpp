@@ -37,7 +37,7 @@ void Widget::on_file_btn_clicked()
         }
         else{
             FILETIME ctime,atime,mtime;
-            GetFileTime(handle,&ctime,&atime,&mtime);
+            int result=GetFileTime(handle,&ctime,&atime,&mtime);
             QDateTime creation_time,last_access_time,last_write_time;
             file_time2qdatetime(ctime,creation_time);
             file_time2qdatetime(atime,last_access_time);
@@ -46,6 +46,10 @@ void Widget::on_file_btn_clicked()
             ui->creation_time->setDateTime(creation_time);
             ui->last_access_time->setDateTime(last_access_time);
             ui->last_write_time->setDateTime(last_write_time);
+            if(!result){
+                qDebug()<<"Get time fail:"<<path<<endl;
+            }
+            CloseHandle(handle);
         }
     }
 }
@@ -69,7 +73,10 @@ void Widget::on_ok_btn_clicked()
     QDateTime last_write_time=ui->last_write_time->dateTime();
     QDateTime last_access_time=ui->last_access_time->dateTime();
     if(file_info.isFile()){
-        modify(path,creation_time,last_write_time,last_access_time);
+        bool result=modify(file_info.filePath(),creation_time,last_write_time,last_access_time);
+        if(!result){
+            qDebug()<<file_info.filePath()<<endl;
+        }
     }
     else{
         QFileInfo cur_fileinfo(path);
@@ -97,7 +104,7 @@ void Widget::on_ok_btn_clicked()
                 }
             }
         }
-        bool result=modify(path,creation_time,last_write_time,last_access_time);
+        bool result=modify(file_info.filePath(),creation_time,last_write_time,last_access_time);
         if(!result){
             qDebug()<<path<<endl;
         }
@@ -144,16 +151,17 @@ void Widget::string2file_time(const QDateTime &s, FILETIME &result)
  */
 bool Widget::modify(const QString &path, const QDateTime &creation_time, const QDateTime &last_write_time, const QDateTime &last_access_time)
 {
+    HANDLE handle = CreateFile(
+        reinterpret_cast<const wchar_t*>(path.utf16()),
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS,
+        nullptr);
     try {
-        HANDLE handle = CreateFile(
-            reinterpret_cast<const wchar_t*>(path.utf16()),
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_DELETE,
-            nullptr,
-            OPEN_EXISTING,
-            FILE_FLAG_BACKUP_SEMANTICS,
-            nullptr);
         if (INVALID_HANDLE_VALUE == handle) {
+            qDebug()<<"INVALID_HANDLE_VALUE "<<path<<endl;
             CloseHandle(handle);
             return false;
         }
@@ -166,6 +174,8 @@ bool Widget::modify(const QString &path, const QDateTime &creation_time, const Q
         return retval;
     }
     catch (...) {
+        qDebug()<<path<<endl;
+        CloseHandle(handle);
         return false;
     }
     //return true;
